@@ -1,5 +1,5 @@
 {
-    "python.pythonPath": ".env/bin/python",
+    "python.pythonPath": "/Users/fumarolaf/miniconda3/envs/dl_tf2/bin/python",
     "eslint.enable": true,
     "eslint.validate": [
         "javascript",
