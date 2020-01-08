@@ -247,6 +247,10 @@ def dump(file_object, annotations):
         new_anno['image_id'] = image.frame
         new_anno['iscrowd'] = 0
         new_anno['segmentation'] = obj['points']
+        if len(obj['points'][0]) < 6:
+            raise Exception("Unable to export frame #{}: "
+                "a polygon has too few points ({})".format(
+                    image.frame, len(obj['points'][0])))
         area, bbox = polygon_area_and_bbox(obj['points'], image.height, image.width)
         new_anno['area'] = float(np.sum(area))
         new_anno['bbox'] = bbox
@@ -333,26 +337,6 @@ def load(file_object, annotations):
     from pycocotools import mask as mask_utils
     import numpy as np
 
-    def get_filename(path):
-        import os
-        return os.path.splitext(os.path.basename(path))[0]
-
-    def match_frame(frame_info, filename):
-        import re
-        # try to match by filename
-        yolo_filename = get_filename(filename)
-        for frame_number, info in frame_info.items():
-            cvat_filename = get_filename(info["path"])
-            if cvat_filename == yolo_filename:
-                return frame_number
-
-        # try to extract frame number from filename
-        numbers = re.findall(r"\d+", filename)
-        if numbers and len(numbers) == 1:
-            return int(numbers[0])
-
-        raise Exception("Cannot match filename or determinate framenumber for {} filename".format(filename))
-
     coco = coco_loader.COCO(file_object.name)
     labels={cat['id']: cat['name'] for cat in coco.loadCats(coco.getCatIds())}
 
@@ -360,15 +344,16 @@ def load(file_object, annotations):
     for img_id in coco.getImgIds():
         anns = coco.loadAnns(coco.getAnnIds(imgIds=img_id))
         img = coco.loadImgs(ids=img_id)[0]
-        frame_number = match_frame(annotations.frame_info, img['file_name'])
+        frame_number = annotations.match_frame(img['file_name'])
         for ann in anns:
             group = 0
             label_name = labels[ann['category_id']]
+            polygons = []
             if 'segmentation' in ann:
-                polygons = []
                 # polygon
                 if ann['iscrowd'] == 0:
-                    polygons = ann['segmentation']
+                    # filter non-empty polygons
+                    polygons = [polygon for polygon in ann['segmentation'] if polygon]
                 # mask
                 else:
                     if isinstance(ann['segmentation']['counts'], list):
@@ -386,6 +371,10 @@ def load(file_object, annotations):
                     group = group_idx
 
                 for polygon in polygons:
+                    if len(polygon) < 6:
+                        raise Exception("Unable to import annotation #{}: "
+                            "a polygon has too few points ({})".format(
+                                ann['id'], len(polygon)))
                     annotations.add_shape(annotations.LabeledShape(
                         type='polygon',
                         frame=frame_number,
@@ -395,3 +384,18 @@ def load(file_object, annotations):
                         attributes=[],
                         group=group,
                     ))
+
+            if not polygons and 'bbox' in ann and isinstance(ann['bbox'], list):
+                xtl = ann['bbox'][0]
+                ytl = ann['bbox'][1]
+                xbr = xtl + ann['bbox'][2]
+                ybr = ytl + ann['bbox'][3]
+                annotations.add_shape(annotations.LabeledShape(
+                    type='rectangle',
+                    frame=frame_number,
+                    label=label_name,
+                    points=[xtl, ytl, xbr, ybr],
+                    occluded=False,
+                    attributes=[],
+                    group=group,
+                ))

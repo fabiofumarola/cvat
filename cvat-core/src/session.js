@@ -10,10 +10,11 @@
 (() => {
     const PluginRegistry = require('./plugins');
     const serverProxy = require('./server-proxy');
-    const { getFrame } = require('./frames');
+    const { getFrame, getPreview } = require('./frames');
     const { ArgumentError } = require('./exceptions');
     const { TaskStatus } = require('./enums');
     const { Label } = require('./labels');
+    const User = require('./user');
 
     function buildDublicatedAPI(prototype) {
         Object.defineProperties(prototype, {
@@ -99,6 +100,12 @@
                                 objectStates, reset);
                         return result;
                     },
+
+                    async exportDataset(format) {
+                        const result = await PluginRegistry
+                            .apiWrapper.call(this, prototype.annotations.exportDataset, format);
+                        return result;
+                    },
                 },
                 writable: true,
             }),
@@ -107,6 +114,11 @@
                     async get(frame) {
                         const result = await PluginRegistry
                             .apiWrapper.call(this, prototype.frames.get, frame);
+                        return result;
+                    },
+                    async preview() {
+                        const result = await PluginRegistry
+                            .apiWrapper.call(this, prototype.frames.preview);
                         return result;
                     },
                 },
@@ -182,7 +194,7 @@
                 * You need upload annotations from a server again after successful executing
                 * @method upload
                 * @memberof Session.annotations
-                * @param {File} annotations - a text file with annotations
+                * @param {File} annotations - a file with annotations
                 * @param {module:API.cvat.classes.Loader} loader - a loader
                 * which will be used to upload
                 * @instance
@@ -361,6 +373,19 @@
                 * @instance
                 * @async
             */
+            /**
+                * Export as a dataset.
+                * Method builds a dataset in the specified format.
+                * @method exportDataset
+                * @memberof Session.annotations
+                * @param {module:String} format - a format
+                * @returns {string} An URL to the dataset file
+                * @throws {module:API.cvat.exceptions.PluginError}
+                * @throws {module:API.cvat.exceptions.ServerError}
+                * @throws {module:API.cvat.exceptions.ArgumentError}
+                * @instance
+                * @async
+            */
 
 
             /**
@@ -374,6 +399,17 @@
                 * @memberof Session.frames
                 * @param {integer} frame number of frame which you want to get
                 * @returns {module:API.cvat.classes.FrameData}
+                * @instance
+                * @async
+                * @throws {module:API.cvat.exceptions.PluginError}
+                * @throws {module:API.cvat.exceptions.ServerError}
+                * @throws {module:API.cvat.exceptions.ArgumentError}
+            */
+            /**
+                * Get the first frame of a task for preview
+                * @method preview
+                * @memberof Session.frames
+                * @returns {string} - jpeg encoded image
                 * @instance
                 * @async
                 * @throws {module:API.cvat.exceptions.PluginError}
@@ -520,19 +556,19 @@
                     get: () => data.id,
                 },
                 /**
-                    * Identifier of a user who is responsible for the job
+                    * Instance of a user who is responsible for the job
                     * @name assignee
-                    * @type {integer}
+                    * @type {module:API.cvat.classes.User}
                     * @memberof module:API.cvat.classes.Job
                     * @instance
                     * @throws {module:API.cvat.exceptions.ArgumentError}
                 */
                 assignee: {
                     get: () => data.assignee,
-                    set: () => (assignee) => {
-                        if (!Number.isInteger(assignee) || assignee < 0) {
+                    set: (assignee) => {
+                        if (assignee !== null && !(assignee instanceof User)) {
                             throw new ArgumentError(
-                                'Value must be a non negative integer',
+                                'Value must be a user instance',
                             );
                         }
                         data.assignee = assignee;
@@ -619,6 +655,7 @@
 
             this.frames = {
                 get: Object.getPrototypeOf(this).frames.get.bind(this),
+                preview: Object.getPrototypeOf(this).frames.preview.bind(this),
             };
         }
 
@@ -780,9 +817,9 @@
                     get: () => data.mode,
                 },
                 /**
-                    * Identificator of a user who has created the task
+                    * Instance of a user who has created the task
                     * @name owner
-                    * @type {integer}
+                    * @type {module:API.cvat.classes.User}
                     * @memberof module:API.cvat.classes.Task
                     * @readonly
                     * @instance
@@ -791,19 +828,19 @@
                     get: () => data.owner,
                 },
                 /**
-                    * Identificator of a user who is responsible for the task
+                    * Instance of a user who is responsible for the task
                     * @name assignee
-                    * @type {integer}
+                    * @type {module:API.cvat.classes.User}
                     * @memberof module:API.cvat.classes.Task
                     * @instance
                     * @throws {module:API.cvat.exceptions.ArgumentError}
                 */
                 assignee: {
                     get: () => data.assignee,
-                    set: () => (assignee) => {
-                        if (!Number.isInteger(assignee) || assignee < 0) {
+                    set: (assignee) => {
+                        if (assignee !== null && !(assignee instanceof User)) {
                             throw new ArgumentError(
-                                'Value must be a non negative integer',
+                                'Value must be a user instance',
                             );
                         }
                         data.assignee = assignee;
@@ -940,11 +977,7 @@
                             }
                         }
 
-                        if (typeof (data.id) === 'undefined') {
-                            data.labels = [...labels];
-                        } else {
-                            data.labels = data.labels.concat([...labels]);
-                        }
+                        data.labels = [...labels];
                     },
                 },
                 /**
@@ -1118,10 +1151,13 @@
                 statistics: Object.getPrototypeOf(this).annotations.statistics.bind(this),
                 hasUnsavedChanges: Object.getPrototypeOf(this)
                     .annotations.hasUnsavedChanges.bind(this),
+                exportDataset: Object.getPrototypeOf(this)
+                    .annotations.exportDataset.bind(this),
             };
 
             this.frames = {
                 get: Object.getPrototypeOf(this).frames.get.bind(this),
+                preview: Object.getPrototypeOf(this).frames.preview.bind(this),
             };
         }
 
@@ -1180,6 +1216,7 @@
         annotationsStatistics,
         uploadAnnotations,
         dumpAnnotations,
+        exportDataset,
     } = require('./annotations');
 
     buildDublicatedAPI(Job.prototype);
@@ -1190,6 +1227,7 @@
         if (this.id) {
             const jobData = {
                 status: this.status,
+                assignee: this.assignee ? this.assignee.id : null,
             };
 
             await serverProxy.jobs.saveJob(this.id, jobData);
@@ -1215,6 +1253,11 @@
         }
 
         const frameData = await getFrame(this.task.id, this.task.mode, frame);
+        return frameData;
+    };
+
+    Job.prototype.frames.preview.implementation = async function () {
+        const frameData = await getPreview(this.task.id);
         return frameData;
     };
 
@@ -1290,10 +1333,11 @@
         if (typeof (this.id) !== 'undefined') {
             // If the task has been already created, we update it
             const taskData = {
+                assignee: this.assignee ? this.assignee.id : null,
                 name: this.name,
                 bug_tracker: this.bugTracker,
                 z_order: this.zOrder,
-                labels: [...this.labels.map(el => el.toJSON())],
+                labels: [...this.labels.map((el) => el.toJSON())],
             };
 
             await serverProxy.tasks.saveTask(this.id, taskData);
@@ -1302,7 +1346,7 @@
 
         const taskData = {
             name: this.name,
-            labels: this.labels.map(el => el.toJSON()),
+            labels: this.labels.map((el) => el.toJSON()),
             image_quality: this.imageQuality,
             z_order: Boolean(this.zOrder),
         };
@@ -1356,6 +1400,11 @@
 
         const result = await getFrame(this.id, this.mode, frame);
         return result;
+    };
+
+    Task.prototype.frames.preview.implementation = async function () {
+        const frameData = await getPreview(this.id);
+        return frameData;
     };
 
     // TODO: Check filter for annotations
@@ -1428,6 +1477,11 @@
 
     Task.prototype.annotations.dump.implementation = async function (name, dumper) {
         const result = await dumpAnnotations(this, name, dumper);
+        return result;
+    };
+
+    Task.prototype.annotations.exportDataset.implementation = async function (format) {
+        const result = await exportDataset(this, format);
         return result;
     };
 })();

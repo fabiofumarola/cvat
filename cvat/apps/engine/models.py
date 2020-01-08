@@ -86,6 +86,12 @@ class Task(models.Model):
 
         return path
 
+    @staticmethod
+    def get_image_frame(image_path):
+        assert image_path.endswith('.jpg')
+        index = os.path.splitext(os.path.basename(image_path))[0]
+        return int(index)
+
     def get_frame_step(self):
         match = re.search("step\s*=\s*([1-9]\d*)", self.frame_filter)
         return int(match.group(1)) if match else 1
@@ -280,9 +286,9 @@ class FloatArrayField(models.TextField):
     separator = ","
 
     def from_db_value(self, value, expression, connection):
-            if value is None:
-                return value
-            return [float(v) for v in value.split(self.separator)]
+        if not value:
+            return value
+        return [float(v) for v in value.split(self.separator)]
 
     def to_python(self, value):
         if isinstance(value, list):

@@ -1,32 +1,28 @@
-import { createStore, applyMiddleware, compose } from 'redux';
 import thunk from 'redux-thunk';
-import { createLogger } from 'redux-logger'
+import {
+    createStore,
+    applyMiddleware,
+    Store,
+    Reducer,
+} from 'redux';
 
-import rootReducer from './reducers/root.reducer';
+const middlewares = [
+    thunk,
+];
 
-export default function configureStore(initialState = {}) {
-  const logger = createLogger({
-    collapsed: true,
-  });
+let store: Store | null = null;
 
-  const middlewares = [];
+export default function createCVATStore(createRootReducer: () => Reducer): void {
+    store = createStore(
+        createRootReducer(),
+        applyMiddleware(...middlewares),
+    );
+}
 
-  middlewares.push(thunk);
+export function getCVATStore(): Store {
+    if (store) {
+        return store;
+    }
 
-  if (process.env.NODE_ENV === `development`) {
-    middlewares.push(logger);
-  }
-
-  return createStore(
-    rootReducer,
-    initialState,
-    compose(
-      applyMiddleware(...middlewares),
-      (window as any).__REDUX_DEVTOOLS_EXTENSION__
-        ?
-      (window as any).__REDUX_DEVTOOLS_EXTENSION__({ trace: true })
-        :
-      (f: any) => f
-    )
-  );
+    throw new Error('First create a store');
 }

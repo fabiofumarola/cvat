@@ -43,8 +43,12 @@ RUN apt-get update && \
         unzip \
         unrar \
         p7zip-full \
-        vim && \
-    pip3 install -U setuptools && \
+        vim \
+        git-core \
+        libsm6 \
+        libxext6 && \
+    python3 -m pip install -U pip && \
+    python3 -m pip install -U setuptools && \
     ln -fs /usr/share/zoneinfo/${TZ} /etc/localtime && \
     dpkg-reconfigure -f noninteractive tzdata && \
     add-apt-repository --remove ppa:mc3man/gstffmpeg-keep -y && \
@@ -78,6 +82,14 @@ RUN if [ "$TF_ANNOTATION" = "yes" ]; then \
         bash -i /tmp/components/tf_annotation/install.sh; \
     fi
 
+# Auto segmentation support. by Mohammad
+ARG AUTO_SEGMENTATION
+ENV AUTO_SEGMENTATION=${AUTO_SEGMENTATION}
+ENV AUTO_SEGMENTATION_PATH=${HOME}/Mask_RCNN
+RUN if [ "$AUTO_SEGMENTATION" = "yes" ]; then \
+    bash -i /tmp/components/auto_segmentation/install.sh; \
+    fi
+
 ARG WITH_TESTS
 RUN if [ "$WITH_TESTS" = "yes" ]; then \
         wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
@@ -104,9 +116,9 @@ RUN if [ "$WITH_TESTS" = "yes" ]; then \
 # Install and initialize CVAT, copy all necessary files
 COPY cvat/requirements/ /tmp/requirements/
 COPY supervisord.conf mod_wsgi.conf wait-for-it.sh manage.py ${HOME}/
-RUN pip3 install --no-cache-dir -r /tmp/requirements/${DJANGO_CONFIGURATION}.txt
+RUN python3 -m pip install --no-cache-dir -r /tmp/requirements/${DJANGO_CONFIGURATION}.txt
 # pycocotools package is impossible to install with its dependencies by one pip install command
-RUN pip3 install --no-cache-dir pycocotools==2.0.0
+RUN python3 -m pip install --no-cache-dir pycocotools==2.0.0
 
 # Install git application dependencies
 RUN apt-get update && \
@@ -120,6 +132,11 @@ RUN apt-get update && \
     else \
         echo export "GIT_SSH_COMMAND=\"ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ProxyCommand='nc -X 5 -x ${socks_proxy} %h %p'\"" >> ${HOME}/.bashrc; \
     fi
+
+# Install poppler for working with pdfs
+RUN apt-get update && \
+    apt install -y poppler-utils && \
+    rm -rf /var/lib/apt/lists/*
 
 # CUDA support
 ARG CUDA_SUPPORT
@@ -143,6 +160,10 @@ COPY utils ${HOME}/utils
 COPY cvat/ ${HOME}/cvat
 COPY cvat-core/ ${HOME}/cvat-core
 COPY tests ${HOME}/tests
+COPY datumaro/ ${HOME}/datumaro
+
+RUN sed -r "s/^(.*)#.*$/\1/g" ${HOME}/datumaro/requirements.txt | xargs -n 1 -L 1 python3 -m pip install --no-cache-dir
+
 # Binary option is necessary to correctly apply the patch on Windows platform.
 # https://unix.stackexchange.com/questions/239364/how-to-fix-hunk-1-failed-at-1-different-line-endings-message
 RUN patch --binary -p1 < ${HOME}/cvat/apps/engine/static/engine/js/3rdparty.patch

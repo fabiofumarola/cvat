@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 Intel Corporation
+ * Copyright (C) 2018-2019 Intel Corporation
  *
  * SPDX-License-Identifier: MIT
  */
@@ -384,6 +384,13 @@ function setupMenu(job, task, shapeCollectionModel,
         $('#settingsWindow').removeClass('hidden');
     });
 
+    $('#openTaskButton').on('click', () => {
+        const win = window.open(
+            `${window.UI_URL}/tasks/${window.cvat.job.task_id}`, '_blank'
+        );
+        win.focus();
+    });
+
     $('#settingsButton').attr('title', `
         ${shortkeys.open_settings.view_value} - ${shortkeys.open_settings.description}`);
 
@@ -576,7 +583,7 @@ function buildAnnotationUI(jobData, taskData, imageMetaData, annotationData, ann
     const shapeCreatorController = new ShapeCreatorController(shapeCreatorModel);
     const shapeCreatorView = new ShapeCreatorView(shapeCreatorModel, shapeCreatorController);
 
-    const polyshapeEditorModel = new PolyshapeEditorModel();
+    const polyshapeEditorModel = new PolyshapeEditorModel(shapeCollectionModel);
     const polyshapeEditorController = new PolyshapeEditorController(polyshapeEditorModel);
     const polyshapeEditorView = new PolyshapeEditorView(polyshapeEditorModel,
         polyshapeEditorController);
